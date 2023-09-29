@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 
-import sys
-import platform
-
 import setuptools
 from distutils.core import setup
 
@@ -18,7 +15,8 @@ setup(name = "phylokrr",
       maintainer = 'Ulises Rosas',
     #   long_description = readme,
     #   long_description_content_type = 'text/markdown',
-      url ='https://github.com/Ulises-Rosas/phylokrr',
+      # url ='https://github.com/Ulises-Rosas/phylokrr',
+      author_email='ulisesfrosasp@gmail.com',
       packages = ['phylokrr'],
       package_dir = {'phylokrr': 'src'},
       python_requires='>=3.5',
@@ -26,6 +24,7 @@ setup(name = "phylokrr",
       zip_safe = False,
       classifiers = [
           'Programming Language :: Python :: 3',
-          'Programming Language :: Python :: 3.5',
       ]
     )
+
+
