@@ -61,7 +61,7 @@ class PhylogeneticRegressor:
 
         return split_data(self.X1, self.y1, num_test, seed = seed)
     
-    def set_hyperparamter_space(self, params):
+    def set_hyperparameter_space(self, params):
         self.hyperparamter_space = params
 
     def fit(self, 
@@ -231,7 +231,7 @@ class PhylogeneticRegressor:
 
         return out
     
-class classification:
+class PhylogeneticLogisticRegressor:
     def __init__(self) -> None:
         pass
 

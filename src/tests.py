@@ -37,7 +37,7 @@ params = {
     'lambda' : np.logspace(-5, 15, 100, dtype = float, base=2),
     'gamma' : np.logspace(-15, 3, 100, dtype = float, base=2),
 }
-model.set_hyperparamter_space(params=params)
+model.set_hyperparameter_space(params=params)
     
 # fit the model
 model.fit(seed=12)
@@ -89,3 +89,17 @@ ax3.scatter(pdp_2[:,0], pdp_2[:,1])
 ax3.set_xlabel('feature 3')
 
 
+## 
+data = np.loadtxt('../data/test_log_data.csv', delimiter=',')
+X,y = data[:,:-1], data[:,-1]
+import matplotlib.pyplot as plt
+plt.scatter(X[:,0], X[:,2], c = y, alpha=0.6)
+
+
+# file_path = "/Users/ulises/Desktop/ABL/software/phylokrr/data/test.tree"
+
+# import dendropy
+# tree = dendropy.Tree.get( path = 'path/to/tree', schema = 'newick')
+
+# for i in tree.postorder_node_iter():
+#     print( i.distance_from_root() )
