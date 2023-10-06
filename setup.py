@@ -12,11 +12,9 @@ with open('README.md') as readme_file:
 
 setup(name = "phylokrr",
       version = '0.2',
-      maintainer = 'Ulises Rosas',
     #   long_description = readme,
     #   long_description_content_type = 'text/markdown',
       # url ='https://github.com/Ulises-Rosas/phylokrr',
-      author_email='ulisesfrosasp@gmail.com',
       packages = ['phylokrr'],
       package_dir = {'phylokrr': 'src'},
       python_requires='>=3.5',
