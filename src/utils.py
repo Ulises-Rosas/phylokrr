@@ -77,6 +77,24 @@ def evaluate_folds(X, y, myFolds, model, tmp_params):
     # return np.mean(all_errs)
     return np.median(all_errs)
 
+def k_fold_cv(X, y, model, num_folds):
+    n, p = X.shape
+    fold_size = n // num_folds
+    mse_sum = 0
+
+    for i in range(num_folds):
+
+        test_idx = list(range(i * fold_size, (i + 1) * fold_size))
+        train_idx = list(set(range(n)) - set(test_idx))
+
+        X_train, X_test = X[train_idx, :], X[test_idx, :]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        model.fit(X_train, y_train)
+        # y_pred = lasso.predict(X_test)
+        mse_sum += model.score(X_test, y_test, metric = 'rmse')
+
+    return mse_sum / num_folds
 
 def k_fold_cv_random(X, y, 
                      model, 
@@ -95,14 +113,10 @@ def k_fold_cv_random(X, y,
         tested_params[:,n] = np.random.choice(params[k], sample)
     
     all_errors = []
-    myFolds = k_folds(X, folds)
     for vec in tested_params:
-        # vec
         tmp_params = dict(zip(all_params, vec))
-        tmp_err = evaluate_folds(X, y, 
-                                 myFolds,
-                                 model, 
-                                 tmp_params)
+        model.set_params(**tmp_params)
+        tmp_err = k_fold_cv(X, y, model, folds)
         all_errors.append([tmp_params, tmp_err])
 
     best_ = sorted(all_errors, key=lambda kv: kv[1], reverse=False)[0]
