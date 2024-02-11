@@ -96,7 +96,8 @@ class KRR:
         # Y = y
         # X = X
         # m = None
-        K_Idx = K + reg_lam * np.diag( np.ones( K.shape[0] ) )
+        n,_ = self.X.shape
+        K_Idx = K + n * reg_lam * np.diag( np.ones( K.shape[0] ) )
         return np.linalg.inv( K_Idx ).dot( y )
 
 
