@@ -107,7 +107,7 @@ class PhylogeneticRegressor:
         if verbose:
             print('hyperparameters: %s' % hyperparameters)
 
-        self.model.set_params(hyperparameters)
+        self.model.set_params(**hyperparameters)
         self.model.fit(X_train, y_train)
 
         if verbose:
@@ -128,7 +128,7 @@ class PhylogeneticRegressor:
         test_size: float, default = 0.4
             if refit, the test size proportion
         """
-        self.model.set_params(hyperparameters)
+        self.model.set_params(**hyperparameters)
 
         if fit:
             self.test_size = test_size
@@ -143,10 +143,17 @@ class PhylogeneticRegressor:
             print('Testing error: %s' % testing_error)
 
 
-    def sample_feature(self, feature, quantiles, sample):
+    def sample_feature(self, feature, quantiles, sample, integer = False):
         """
         sample unweighted column
         """
+        # X = X0
+        # feature =0
+        Xpdp = self.X[:,feature]
+
+        if integer:
+            return np.sort(np.unique(Xpdp))
+        
         q = np.linspace(
             start = quantiles[0],
             stop  = quantiles[1],
@@ -154,12 +161,11 @@ class PhylogeneticRegressor:
         )
 
         # sample from the original feature space
-        Xpdp = self.X[:,feature]
         Xq = np.quantile(Xpdp, q = q)
 
-        return Xq
+        return Xq    
 
-    def pdp(self, feature, quantiles = [0,1], sample = 70):
+    def pdp(self, feature, integer = False, quantiles = [0,1], sample = 70):
         """
         partial depedence plot values.
 
@@ -174,7 +180,7 @@ class PhylogeneticRegressor:
         if not len(self.P_inv):
             self.P_inv = np.linalg.inv(self.P)
 
-        Xq = self.sample_feature( feature, quantiles, sample )
+        Xq = self.sample_feature(feature, quantiles, sample, integer)
         
         pdp_values = []
         for n in Xq:

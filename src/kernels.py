@@ -43,8 +43,15 @@ class KRR:
         self.X = []
         self.y = []
 
-    def set_params(self, params):
-        self.params = params
+    def set_params(self, **params):
+
+        if self.kernel == 'rbf':
+            self.params['gamma'] = params['gamma']
+
+        else:
+            self.params['c'] = params['c']
+
+        self.params['lambda'] = params['lambda']
 
     def get_params(self):
         return self.params
