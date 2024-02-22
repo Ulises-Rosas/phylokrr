@@ -28,7 +28,19 @@ def linear_kernel(a, b, c):
 
 class KRR:
 
-    def __init__(self, kernel = 'rbf') -> None:
+    def __init__(self, kernel = 'rbf', fit_intercept = True, check_cov = False) -> None:
+        """
+        Weighted Kernel Ridge Regression
+
+        kernel: str, default = 'rbf'
+            kernel type
+
+        fit_intercept: bool, default = True
+            fit intercept term
+
+        check_cov: bool, default = False
+            Check covariance matrix, i.e., P.T @ P == vcv^-1
+        """
 
         self.kernel = kernel
 
@@ -38,10 +50,15 @@ class KRR:
         else:
             self.params = {'c': 0.1, 'lambda': 0.1}
 
+        self.fit_intercept = fit_intercept
+        self.check_cov = check_cov
+        
         # internal
-        self.alpha = []
-        self.X = []
-        self.y = []
+        self.intercept = 0
+        self.alpha = np.array([])
+        self.X = np.array([])
+
+        self.chol = False
 
     def set_params(self, **params):
 
@@ -56,10 +73,59 @@ class KRR:
     def get_params(self):
         return self.params
     
-    def fit(self, X, y):
+    def P_mat(self, vcv):
+        """
+        get the square root of the inverse of the
+        covariance matrix.
+
+        vcv: np.array, default = None
+            covariance matrix
+        """
+        
+        if vcv is None:
+            return None
+        
+        if self.check_cov:
+            self.assert_COV_sym(vcv)
+
+        if self.chol:
+            C = np.linalg.cholesky( vcv )
+            P = np.linalg.inv( C )
+
+        else:
+            L,Q  = np.linalg.eig( vcv )
+            P  = Q @ np.diag( L**(-1/2) ) @ Q.T 
+
+        if self.check_cov:
+            self.assert_COV_decom(P, vcv)
+
+        return P
+    
+    def assert_COV_sym(self, vcv, tol=1e-8):
+        assert np.all(np.abs(vcv-vcv.T) < tol), 'not symmetric matrix'
+
+    def assert_COV_decom(self, P, vcv):
+        """
+        check if P.T @ P == vcv^-1
+        expensive calculation for large matrices
+        """
+        assert np.all(np.round(P.T @ P, 2) == np.round(np.linalg.inv(vcv), 2)), "P.T @ P != vcv^-1"
+
+    def fit(self, X, y, vcv = None):
+        """
+        Fit the model
+
+        vcv: np.array, default = None
+            covariance matrix
+
+        """
+        # X = X_train
+        # y = y_train
+        # vcv = vcv_train
         
         self.X = X
-        self.y = y
+        # self.y = y
+        P = self.P_mat(vcv)
 
         if self.kernel == 'rbf':
             K_train = RBF_kernel(self.X, self.X, self.params['gamma'])
@@ -67,7 +133,11 @@ class KRR:
         else:
             K_train = linear_kernel(self.X, self.X, self.params['c'])
 
-        self.alpha = self.opt_alpha(K_train, self.y, self.params['lambda'])
+        self.alpha = self.opt_alpha(K_train, y, self.params['lambda'], P)
+        
+        # intercept term 
+        if self.fit_intercept:
+            self.intercept = np.mean(y - K_train @ self.alpha)
 
     def predict(self, X_test):
 
@@ -79,33 +149,43 @@ class KRR:
         else:
             K_test = linear_kernel(X_test, self.X, self.params['c'])
         
-        return K_test @ self.alpha
+        return K_test @ self.alpha + self.intercept
     
-    def score(self, X_test, y_test, metric = 'rmse'):
+    def score(self, X_test, y_test, vcv_test):
+        """
+        calculates weighted RMSE
+        """
 
         y_pred = self.predict(X_test)
+        r = y_pred - y_test
 
-        if metric == 'rmse':
-            return np.sqrt( np.mean( (y_pred - y_test)**2 ) )
-    
-        else:
-            # r2
-            u = ((y_test - y_pred)**2).sum()
-            v = ((y_test - y_test.mean())** 2).sum()
-
-            return 1 - (u/v)
+        if vcv_test is None:
+            return np.sqrt( np.mean( r**2 ) )
+        
+        P = self.P_mat(vcv_test)
+        
+        return np.sqrt( np.mean( (P @ r)**2 ) )
     
     def rmse(self, K, alpha, Y):
 
         return np.sqrt( np.mean( (K.dot(alpha) - Y)**2 ) )
     
-    def opt_alpha(self, K, y, reg_lam = None):
+    def opt_alpha(self, K, y, reg_lam = None, P = None):
         # Y = y
         # X = X
         # m = None
         n,_ = self.X.shape
-        K_Idx = K + n * reg_lam * np.diag( np.ones( K.shape[0] ) )
-        return np.linalg.inv( K_Idx ).dot( y )
+        
+        I = np.eye(K.shape[0])
+        # I[0,0] = 0
+        nlI = n * reg_lam * I
+
+        if P is None:
+            return np.linalg.solve(K + nlI, y)
+        
+        else:
+            return P @ np.linalg.solve(P @ K @ P + nlI,  P @ y)
+            # return np.linalg.solve(P.T @ P @ K + nlI,  P.T @ P @ y)
 
 
 class LKRR:

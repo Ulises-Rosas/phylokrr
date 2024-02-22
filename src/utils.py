@@ -77,7 +77,10 @@ def evaluate_folds(X, y, myFolds, model, tmp_params):
     # return np.mean(all_errs)
     return np.median(all_errs)
 
-def k_fold_cv(X, y, model, num_folds):
+def k_fold_cv(X, y, vcv, model, num_folds):
+    """
+    k-fold cross-validation with covariance matrix
+    """
     n, p = X.shape
     fold_size = n // num_folds
     mse_sum = 0
@@ -90,38 +93,60 @@ def k_fold_cv(X, y, model, num_folds):
         X_train, X_test = X[train_idx, :], X[test_idx, :]
         y_train, y_test = y[train_idx], y[test_idx]
 
-        model.fit(X_train, y_train)
-        # y_pred = lasso.predict(X_test)
-        mse_sum += model.score(X_test, y_test, metric = 'rmse')
+        vcv_train = vcv[train_idx,:][:,train_idx]
+        vcv_test = vcv[test_idx,:][:,test_idx]
+
+        model.fit(X_train, y_train, vcv = vcv_train)
+        mse_sum += model.score(X_test, y_test, vcv_test)
 
     return mse_sum / num_folds
 
-def k_fold_cv_random(X, y, 
+def k_fold_cv_random(X, y, vcv,
                      model, 
                      params,
                      folds = 3, 
                      sample = 500,
-                     verbose = False,
+                     verbose = True,
                      seed = 123
                      ):
+    """
+    Random search for hyperparameter tuning using k-fold cross-validation
+    and covariance matrix
+    """
     
     np.random.seed(seed=seed)
-    
+    # make random choice from the grid of hyperparameters
     all_params = params.keys()
-    tested_params = np.ones((sample, len(all_params)))
+    tested_params = np.zeros((sample, len(all_params)))
     for n,k in enumerate(all_params):
         tested_params[:,n] = np.random.choice(params[k], sample)
+
+    if verbose:
+        # check tested_params are unique
+        tested_params = np.unique(tested_params, axis=0)
+        print("Number of unique hyperparameters: ", tested_params.shape[0])
     
     all_errors = []
     for vec in tested_params:
         tmp_params = dict(zip(all_params, vec))
         model.set_params(**tmp_params)
-        tmp_err = k_fold_cv(X, y, model, folds)
+        tmp_err = k_fold_cv(X, y, vcv, model, folds)
         all_errors.append([tmp_params, tmp_err])
 
     best_ = sorted(all_errors, key=lambda kv: kv[1], reverse=False)[0]
+
     if verbose:
         print("CV score: ", best_[1])
 
     return best_[0]
 
+def PGLS(X, y, vcv):
+    """
+    Generalized Least Squares with phylogenetic covariance matrix
+    as the weight matrix
+    """
+    n,p = X.shape
+    Oinv = np.linalg.inv(vcv)
+    X_ = np.hstack((np.ones((n,1)), X))
+    beta = np.linalg.inv(X_.T @ Oinv @ X_) @ X_.T @ Oinv @ y
+    return beta
