@@ -14,6 +14,20 @@ def split_data(X,y,num_test, seed = 123):
 
     return X_train,y_train, X_test, y_test
 
+def split_data_vcv(X,y,vcv, num_test, seed = 123):
+    
+    random.seed(seed)
+    n,_ = X.shape
+
+    test_idx  = random.sample(range(n), k = num_test)
+    train_idx = list( set(range(n)) - set(test_idx) )
+
+    X_train, X_test = X[train_idx,:], X[test_idx,:]
+    y_train, y_test = y[train_idx]  , y[test_idx]
+    vcv_train, vcv_test = vcv[train_idx,:][:,train_idx], vcv[test_idx,:][:,test_idx]
+
+    return X_train, X_test, y_train, y_test, vcv_train, vcv_test
+
 def k_folds(X, folds = 3, seed = 123):
     """
     test_indx, train_indx
