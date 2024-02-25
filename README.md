@@ -31,7 +31,7 @@ n = vcv.shape[0]
 mean = np.zeros(n)
 X = np.random.multivariate_normal(cov=vcv, mean=mean).reshape(-1,1)
 # Non-linear response variable (sine curve)
-y = np.sin(X*2.1).ravel() + 5 
+y = np.sin(X*2).ravel() + 5 
 
 # Add noise to the response variable
 y[::10] += 4 * (0.5 - np.random.rand(X.shape[0] // 10)) 
