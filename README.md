@@ -1,6 +1,7 @@
-# Phylogenetic regression using regularized kernels
+# Non-linear Phylogenetic regression using regularized kernels
 
-Installation
+
+# Installation
 
 ```
 pip install phylokrr
