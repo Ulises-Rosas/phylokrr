@@ -25,23 +25,8 @@ def linear_kernel(a, b, c):
     return XXt + C
 
 
-
-class KRR:
-
-    def __init__(self, kernel = 'rbf', fit_intercept = True, check_cov = False) -> None:
-        """
-        Weighted Kernel Ridge Regression
-
-        kernel: str, default = 'rbf'
-            kernel type
-
-        fit_intercept: bool, default = True
-            fit intercept term
-
-        check_cov: bool, default = False
-            Check covariance matrix, i.e., P.T @ P == vcv^-1
-        """
-
+class WKRR:
+    def __init__(self, kernel='rbf', fit_intercept=True, check_cov=False) -> None:
         self.kernel = kernel
 
         if self.kernel == 'rbf':
@@ -52,16 +37,12 @@ class KRR:
 
         self.fit_intercept = fit_intercept
         self.check_cov = check_cov
-        
-        # internal
         self.intercept = 0
         self.alpha = np.array([])
         self.X = np.array([])
-
         self.chol = False
 
     def set_params(self, **params):
-
         if self.kernel == 'rbf':
             self.params['gamma'] = params['gamma']
 
@@ -72,152 +53,76 @@ class KRR:
 
     def get_params(self):
         return self.params
-    
-    def P_mat(self, vcv):
-        """
-        get the square root of the inverse of the
-        covariance matrix.
 
-        vcv: np.array, default = None
-            covariance matrix
-        """
-        
+    def P_mat(self, vcv):
         if isinstance(vcv, type(None)):
             return None
-        
+
         if self.check_cov:
             self.assert_COV_sym(vcv)
 
         if self.chol:
-            C = np.linalg.cholesky( vcv )
-            P = np.linalg.inv( C )
+            C = np.linalg.cholesky(vcv)
+            P = np.linalg.inv(C)
 
         else:
-            L,Q  = np.linalg.eig( vcv )
-            P  = Q @ np.diag( L**(-1/2) ) @ Q.T 
+            L, Q = np.linalg.eig(vcv)
+            P = Q @ np.diag(L ** (-1 / 2)) @ Q.T
 
         if self.check_cov:
             self.assert_COV_decom(P, vcv)
 
         return P
-    
+
     def assert_COV_sym(self, vcv, tol=1e-8):
-        assert np.all(np.abs(vcv-vcv.T) < tol), 'not symmetric matrix'
+        assert np.all(np.abs(vcv - vcv.T) < tol), 'not symmetric matrix'
 
     def assert_COV_decom(self, P, vcv):
-        """
-        check if P.T @ P == vcv^-1
-        expensive calculation for large matrices
-        """
         assert np.all(np.round(P.T @ P, 2) == np.round(np.linalg.inv(vcv), 2)), "P.T @ P != vcv^-1"
 
-    def fit(self, X, y, vcv = None):
-        """
-        Fit the model
-
-        vcv: np.array, default = None
-            covariance matrix
-
-        """
-        # X = X_train
-        # y = y_train
-        # vcv = vcv_train
-        
+    def fit(self, X, y, vcv=None):
         self.X = X
-        # self.y = y
         P = self.P_mat(vcv)
 
         if self.kernel == 'rbf':
             K_train = RBF_kernel(self.X, self.X, self.params['gamma'])
-
         else:
             K_train = linear_kernel(self.X, self.X, self.params['c'])
 
         self.alpha = self.opt_alpha(K_train, y, self.params['lambda'], P)
-        
-        # intercept term 
+
         if self.fit_intercept:
             self.intercept = np.mean(y - K_train @ self.alpha)
 
     def predict(self, X_test):
-
         assert len(self.alpha) > 0, "The model needs to be fitted first"
 
         if self.kernel == 'rbf':
             K_test = RBF_kernel(X_test, self.X, self.params['gamma'])
-
         else:
             K_test = linear_kernel(X_test, self.X, self.params['c'])
-        
+
         return K_test @ self.alpha + self.intercept
-    
-    def score(self, X_test, y_test, vcv_test, metric = 'rmse'):
-        """
-        
-        Calculates score considerint the covariance matrix
-        This error is the same as the in objective function
 
-        X_test: np.array
-            testing data
-        
-        y_test: np.array
-            testing targets
-        
-        vcv_test: np.array
-            testing covariance matrix. If None, then it
-            will return the standard RMSE and R^2
-
-        metric: str, default = 'rmse'
-            weighted root mean squared error (the same 
-            that was used to construct the objective function).
-            if metric = 'r2', then it returns the R^2 which
-            also considers the covariance matrix, see Willett & Singer (1988)
-
-        Returns:
-        --------
-        float
-            score
-
-        Reference:
-        ---------
-        Willett, J. B., & Singer, J. D. (1988). 
-        Another cautionary note about R 2: Its use 
-        in weighted least-squares regression analysis. 
-        The American Statistician, 42(3), 236-238.
-        """
-
+    def score(self, X_test, y_test, vcv_test, metric='rmse'):
         y_pred = self.predict(X_test)
-        r = y_pred - y_test
-        
+
         if isinstance(vcv_test, type(None)):
             P = np.eye(X_test.shape[0])
-
         else:
             P = self.P_mat(vcv_test)
 
-        werr = P @ r # weighted residuals
-        Py   = P @ y_test # weighted targets
+        werr = P @ (y_pred - y_test)  # weighted residuals
 
         if metric == 'rmse':
             return rmse(werr)
-        
         else:
+            Py = P @ y_test  # weighted targets
             return R2(Py, werr)
-            
-        # if metric == 'rmse':
-        #     return np.sqrt( np.mean( r**2 ) )
-        
-        # else:
-        #     u = r.T @ r
-        #     v = y_test.T @ y_test - n * np.mean(y_test)**2
-        #     return 1 - (u/v)
-    
-    def opt_alpha(self, K, y, reg_lam = None, P = None):
-        # Y = y
-        # X = X
-        # m = None
-        n,_ = self.X.shape
-        
+
+    def opt_alpha(self, K, y, reg_lam=None, P=None):
+
+        n, _ = self.X.shape
         I = np.eye(K.shape[0])
         nlI = n * reg_lam * I
 
@@ -225,90 +130,50 @@ class KRR:
             return np.linalg.solve(K + nlI, y)
         
         else:
-            return P @ np.linalg.solve(P @ K @ P + nlI,  P @ y)
-            # return np.linalg.solve(P.T @ P @ K + nlI,  P.T @ P @ y)
+            return P @ np.linalg.solve(P @ K @ P + nlI, P @ y)
 
+class KRR(WKRR):
 
-class LKRR:
+    def __init__(self, kernel='rbf', fit_intercept=True) -> None:
+        super().__init__(kernel, fit_intercept)
+        self.intercept = 0
+        self.alpha = np.array([])
+        self.X = np.array([])
 
-    def __init__(self, kernel = 'rbf') -> None:
-
-        self.kernel = kernel
-
-        if self.kernel == 'rbf':
-            self.params = {'gamma': 0.1, 'lambda': 0.1}
-
-        else:
-            self.params = {'c': 0.1, 'lambda': 0.1}
-
-        # internal
-        self.alpha = []
-        self.X = []
-        self.y = []
-
-    def p1(self, X, beta):
-        return 1/(1 + np.exp(X.dot(beta)))
-
-    def p0(self, X, beta):
-        EX = np.exp(X.dot(beta))
-        return EX/(1 + EX)
-
-    def set_params(self, params):
-        self.params = params
-
-    def get_params(self):
-        return self.params
-    
     def fit(self, X, y):
-        
         self.X = X
         self.y = y
 
         if self.kernel == 'rbf':
             K_train = RBF_kernel(self.X, self.X, self.params['gamma'])
-
+            
         else:
             K_train = linear_kernel(self.X, self.X, self.params['c'])
 
         self.alpha = self.opt_alpha(K_train, self.y, self.params['lambda'])
 
-    def predict(self, X_test):
+        if self.fit_intercept:
+            self.intercept = np.mean(y - K_train @ self.alpha)
 
-        assert len(self.alpha) > 0, "The model needs to be fitted first"
-
-        if self.kernel == 'rbf':
-            K_test = RBF_kernel(X_test, self.X, self.params['gamma'])
-
-        else:
-            K_test = linear_kernel(X_test, self.X, self.params['c'])
+    def opt_alpha(self, K, y, reg_lam=None):
         
-        return K_test @ self.alpha
-    
-    def score(self, X_test, y_test, metric = 'rmse'):
+        n, _ = self.X.shape
+        I = np.eye(K.shape[0])
+        nlI = n * reg_lam * I
 
+        return np.linalg.solve(K + nlI, y)
+        
+
+    def score(self, X_test, y_test, metric='rmse'):
         y_pred = self.predict(X_test)
 
         if metric == 'rmse':
-            return np.sqrt( np.mean( (y_pred - y_test)**2 ) )
-    
+            return np.sqrt(np.mean((y_pred - y_test) ** 2))
         else:
-            # r2
-            u = ((y_test - y_pred)**2).sum()
-            v = ((y_test - y_test.mean())** 2).sum()
+            u = ((y_test - y_pred) ** 2).sum()
+            v = ((y_test - y_test.mean()) ** 2).sum()
 
-            return 1 - (u/v)
-    
-    def rmse(self, K, alpha, Y):
-
-        return np.sqrt( np.mean( (K.dot(alpha) - Y)**2 ) )
-    
-    def opt_alpha(self, K, y, reg_lam = None):
-        # Y = y
-        # X = X
-        # m = None
-        K_Idx = K + reg_lam * np.diag( np.ones( K.shape[0] ) )
-        return np.linalg.inv( K_Idx ).dot( y )
-
+            return 1 - (u / v)
 
 # def P_mat(vcv, chol = False, corr = False):
     
