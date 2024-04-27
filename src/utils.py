@@ -12,7 +12,7 @@ def split_data(X,y,num_test, seed = 123):
     X_train, X_test = X[train_idx,:], X[test_idx,:]
     y_train, y_test = y[train_idx]  , y[test_idx]
 
-    return X_train,y_train, X_test, y_test
+    return X_train, X_test, y_train, y_test
 
 def split_data_vcv(X,y,vcv, num_test, seed = 123):
     
@@ -91,7 +91,7 @@ def evaluate_folds(X, y, myFolds, model, tmp_params):
     # return np.mean(all_errs)
     return np.median(all_errs)
 
-def k_fold_cv(X, y, vcv, model, num_folds):
+def k_fold_cv_vcv(X, y, vcv, model, num_folds):
     """
     k-fold cross-validation with covariance matrix
     """
@@ -115,7 +115,7 @@ def k_fold_cv(X, y, vcv, model, num_folds):
 
     return mse_sum / num_folds
 
-def k_fold_cv_random(X, y, vcv,
+def k_fold_cv_random_vcv(X, y, vcv,
                      model, 
                      params,
                      folds = 3, 
@@ -144,7 +144,7 @@ def k_fold_cv_random(X, y, vcv,
     for vec in tested_params:
         tmp_params = dict(zip(all_params, vec))
         model.set_params(**tmp_params)
-        tmp_err = k_fold_cv(X, y, vcv, model, folds)
+        tmp_err = k_fold_cv_vcv(X, y, vcv, model, folds)
         all_errors.append([tmp_params, tmp_err])
 
     best_ = sorted(all_errors, key=lambda kv: kv[1], reverse=False)[0]
