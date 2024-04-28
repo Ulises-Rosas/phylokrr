@@ -7,9 +7,12 @@
 pip install phylokrr
 ```
 
-# Quick overview
+# Notebooks
 
-## Data simulation
+* [Quick Overview](https://colab.research.google.com/drive/1TrQymi-D6B4KCmWciqneMzMDfTEcTSYX?usp=sharing)
+
+
+<!-- ## Data simulation
 This simulation is based on a given covariance matrix
 
 
@@ -121,7 +124,7 @@ plt.legend()
 <p align="center">
 <img src="https://github.com/Ulises-Rosas/phylokrr/blob/main/data/imgs/phyloKRR_vs_PGLS_cv.png" alt="drawing" width="600px"/>
 </p>
-
+ -->
 
 # Reference
 
