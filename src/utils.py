@@ -153,16 +153,71 @@ def k_fold_cv_random_vcv(X, y, vcv,
 
     return best_[0]
 
-def PGLS(X, y, vcv):
+def k_fold_cv(X, y, model, num_folds):
     """
-    Generalized Least Squares with phylogenetic covariance matrix
-    as the weight matrix
+    k-fold cross-validation
     """
-    n,p = X.shape
-    Oinv = np.linalg.inv(vcv)
-    X_ = np.hstack((np.ones((n,1)), X))
-    beta = np.linalg.inv(X_.T @ Oinv @ X_) @ X_.T @ Oinv @ y
-    return beta
+
+    n, p = X.shape
+    fold_size = n // num_folds
+
+    all_errors = []
+    for i in range(num_folds):
+
+        test_idx = list(range(i * fold_size, (i + 1) * fold_size))
+        train_idx = list(set(range(n)) - set(test_idx))
+
+        X_train, X_test = X[train_idx, :], X[test_idx, :]
+        y_train, y_test = y[train_idx], y[test_idx]
+    
+        model.fit(X_train, y_train)
+        tmp_err = model.score(X_test, y_test, metric='rmse')
+        all_errors.append(tmp_err)
+
+    return np.mean(all_errors)
+
+def k_fold_cv_random(X, y, model, params, folds=3, sample=500, verbose=True, seed=123):
+    """
+    Random search for hyperparameter tuning using k-fold cross-validation
+    """
+    np.random.seed(seed=seed)
+
+    # make random choice from the grid of hyperparameters
+    all_params = params.keys()
+    tested_params = np.zeros((sample, len(all_params)))
+
+    for n, k in enumerate(all_params):
+        tested_params[:, n] = np.random.choice(params[k], sample)
+
+    if verbose:
+        # check tested_params are unique
+        tested_params = np.unique(tested_params, axis=0)
+        print("Number of unique hyperparameters: ", tested_params.shape[0])
+
+    # shuffle the data
+    n = X.shape[0]
+    idx = np.arange(n)
+    np.random.shuffle(idx)
+    X = X[idx]
+    y = y[idx]
+
+    all_errors = []
+    for vec in tested_params:
+        tmp_params = dict(zip(all_params, vec))
+        model.set_params(**tmp_params)
+        tmp_err = k_fold_cv(X, y, model, folds)
+        all_errors.append([tmp_params, tmp_err])
+
+        if verbose:
+            print("CV score: %s, Parameters %s" % (tmp_err, tmp_params))
+
+    # take the best hyperparameters
+    best_ = sorted(all_errors, key=lambda kv: kv[1], reverse=False)[0]
+
+    if verbose:
+        print("Best CV score: ", best_[1])
+
+    return best_[0]
 
 
 def _scaler(ref, dat, use_sd = False):
@@ -182,27 +237,53 @@ def _scaler(ref, dat, use_sd = False):
 
         return centered
 
-class LS:
-    def __init__(self, fit_intercept=False, weighted=False) -> None:
+class PGLS:
+    def __init__(self, 
+                 fit_intercept=False) -> None:
+        
         self.fit_intercept = fit_intercept
-        self.weighted = weighted
+        # self.weighted = weighted
         self.intercept = 0
         self.beta = np.array([])
 
-    def fit(self, X, y,):
-        n, p = X.shape
-
-        if self.weighted:
-            tmp_beta = np.linalg.solve(X.T @ X, X.T @ y)
+    def std_PGLS(self, X, y, vcv):
+        """
+        Generalized Least Squares with phylogenetic covariance matrix
+        as the weight matrix
+        """
+        n,p = X.shape
+        # Oinv = np.linalg.inv(vcv)
 
         if self.fit_intercept:
-            self.intercept = np.mean(y - X @ tmp_beta)
+            X = np.hstack((np.ones((n,1)), X))
 
-        self.beta = np.hstack((self.intercept, tmp_beta)) if self.fit_intercept else tmp_beta
+        self.beta =  np.linalg.solve(
+                        X.T @ np.linalg.solve( vcv , X ),
+                        X.T @ np.linalg.solve( vcv , y )
+                    )
+
+    def OLS(self, X, y):
+        """
+        Ordinary Least Squares
+        """
+        n,p = X.shape
+
+        if self.fit_intercept:
+            X = np.hstack((np.ones((n,1)), X))
+
+        self.beta = np.linalg.solve(X.T @ X, X.T @ y)
+
+    def fit(self, X, y, vcv=None):
+
+        if vcv is not None:
+            self.std_PGLS(X, y, vcv)
+
+        else:
+            self.OLS(X, y)
 
     def predict(self, X):
-        n, p = X.shape
 
+        n, p = X.shape
         if self.fit_intercept:
             X = np.hstack((np.ones((n, 1)), X))
 
@@ -219,6 +300,21 @@ class LS:
 
             return 1 - (u / v)
 
+def P_inv_simple(vcv):
+    """
+    get the square root of the inverse of the
+    """
+
+    # Kr = np.diag(1/np.sqrt(np.diag(vcv)))
+    # vcv = Kr @ vcv @ Kr
+
+    if not isinstance(vcv, np.ndarray):
+        return None
+
+    L,Q = np.linalg.eig( vcv )
+    P = Q @ np.diag( L**(1/2) ) @ Q.T
+
+    return P
 
 def P_mat_simple(vcv):
     """
@@ -228,7 +324,7 @@ def P_mat_simple(vcv):
     # Kr = np.diag(1/np.sqrt(np.diag(vcv)))
     # vcv = Kr @ vcv @ Kr
 
-    if isinstance(vcv, type(None)):
+    if not isinstance(vcv, np.ndarray):
         return None
 
     L,Q = np.linalg.eig( vcv )
@@ -236,19 +332,10 @@ def P_mat_simple(vcv):
 
     return P
 
-
-def myfunc(x, b=0, type='sin', add_noise = False, noise_var = 1, noise_freq = None):
-
-    noise = np.random.normal(1, noise_var, x.shape[0])
+def myfunc(x, b=0, type='sin', add_noise = False, noise = 1):    
 
     if type == 'sin':
         y =  np.sin( np.sum(x, axis=1) * b).ravel()
-        # if add_noise:
-            # y += noise
-            # if noise_freq:
-            #     y[::noise_freq] += 3 * (0.5 - np.random.rand(x.shape[0] // noise_freq))
-        # if add_noise:
-        #     y[::noise_freq] += 3 * (0.5 - np.random.rand(x.shape[0] // noise_freq))
 
     else:
         y =  np.sum(x, axis=1) ** b
@@ -258,14 +345,12 @@ def myfunc(x, b=0, type='sin', add_noise = False, noise_var = 1, noise_freq = No
 
     return y
 
-
 def sim_data(vcv, mean_vector, b, 
-             on_weighted=False, 
-             add_noise = False, 
+             on_weighted=True, 
+             add_noise = True, 
              noise_var = 1,
-             noise_freq = 10, # only applied to sine type of function
              n_var = 3, 
-             extra_weights = None, 
+             extra_weights = [], 
              type='pol',
              weight_with_vcv = True,
              vcv2 = None
@@ -322,18 +407,22 @@ def sim_data(vcv, mean_vector, b,
     y_w_uc: np.array
         weighted response variable (uncentered)
     """
-    # n_var = 3
-
-    if extra_weights:
+    # n_var = 1
+    # mean_vector = np.zeros(vcv.shape[0])
+    # b = 3
+    n = vcv.shape[0]
+    if len(extra_weights):
         assert len(extra_weights) == n_var, "extra weights must have the same length as the number of predictors"
     
     else:
         extra_weights = np.ones(n_var)
 
-    X_uw_uc = np.zeros((vcv.shape[0], n_var))
+    X_uw_uc = np.zeros((n, n_var))
     for j in range(n_var):
         X_uw_uc[:,j] = np.random.multivariate_normal(mean=mean_vector, cov=vcv)*extra_weights[j]
-
+    
+    if add_noise:
+        noise = np.random.normal(0, noise_var, n)
 
     if weight_with_vcv:
         P = P_mat_simple(vcv)
@@ -344,17 +433,18 @@ def sim_data(vcv, mean_vector, b,
 
     if on_weighted:
         X_w_uc = P @ X_uw_uc
+        # the variance and expectation 
+        # of the response variable will depend on the moment 
+        # that generates b. V(x^b) = E(x^2b) - E(x^b)^2
+        # E(x^b) is the expectation in the moment b.
+        # Both the expectation and variance are point estimates
         y_w_uc = myfunc(X_w_uc, b=b, type=type, 
                         add_noise=add_noise,
-                        noise_freq=noise_freq, 
-                        noise_var=noise_var).ravel()
-
-        # plt.scatter(np.sum(X_w_uc, 1), y_w_uc, color='blue', alpha=0.5)
+                        noise=noise).ravel()
     else:
         y_uw_uc = myfunc(X_uw_uc, b=b, type=type, 
                          add_noise=add_noise, 
-                         noise_freq=noise_freq,
-                         noise_var=noise_var).ravel()
+                         noise=noise).ravel()
 
         X_w_uc = P @ X_uw_uc
         y_w_uc = P @ y_uw_uc
