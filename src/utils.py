@@ -237,6 +237,44 @@ def _scaler(ref, dat, use_sd = False):
 
         return centered
 
+def weight_data(X_uw_uc, y_uw_uc, vcv, use_sd = False):
+    """
+    Weight data using the square root of the inverse of the covariance matrix
+    and scale the data
+
+    Parameters
+    ----------
+    X_uw_uc: np.array
+        unweighted independent variables (uncentered)
+    
+    y_uw_uc: np.array
+        unweighted response variable (uncentered)
+
+    vcv: np.array
+        covariance matrix
+
+    use_sd: bool
+        whether to scale the data using the standard deviation
+
+    Returns
+    -------
+    X_w: np.array
+        weighted and scaled independent variables
+
+    y_w: np.array
+        weighted and scaled response variable
+    """
+
+    P = P_mat_simple(vcv)
+
+    X_w_uc = P @ X_uw_uc
+    y_w_uc = P @ y_uw_uc
+
+    X_w = _scaler(X_w_uc, X_w_uc, use_sd)
+    y_w = _scaler(y_w_uc, y_w_uc, use_sd)
+
+    return X_w, y_w
+
 class PGLS:
     def __init__(self, 
                  fit_intercept=False) -> None:
