@@ -11,7 +11,7 @@ pip install phylokrr
 
 * [Quick Overview](https://colab.research.google.com/drive/1TrQymi-D6B4KCmWciqneMzMDfTEcTSYX?usp=sharing)
 * [Model Inspection](https://colab.research.google.com/drive/1sW67wIf7IH30zpLPe0qo8wlvBOTLYLaU?usp=sharing)
-
+* [Multi-output Regression](https://colab.research.google.com/drive/1wGNtyyl_0taAgUCktLr1tbTv-nDrgTa0?usp=sharing)
 
 <!-- ## Data simulation
 This simulation is based on a given covariance matrix
