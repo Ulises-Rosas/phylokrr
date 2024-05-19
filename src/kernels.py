@@ -158,6 +158,7 @@ class KRR(WKRR):
         """
         Initialize the Kernel Ridge Regression model
         kernel: str, default='rbf'. The kernel to use. Options are 'rbf', 'linear', and 'precomputed'
+                If 'precomputed', the kernel matrix is passed directly.
         fit_intercept: bool, default=True. Whether to fit an intercept term
         """
         super().__init__(kernel, fit_intercept)
