@@ -32,8 +32,11 @@ class WKRR:
         if self.kernel == 'rbf':
             self.params = {'gamma': 0.1, 'lambda': 0.1}
 
-        else:
+        elif self.kernel == 'linear':
             self.params = {'c': 0.1, 'lambda': 0.1}
+
+        else:
+            self.params = {'lambda': 0.1}
 
         self.fit_intercept = fit_intercept
         self.check_cov = check_cov
@@ -45,9 +48,12 @@ class WKRR:
     def set_params(self, **params):
         if self.kernel == 'rbf':
             self.params['gamma'] = params['gamma']
-
-        else:
+            
+        elif self.kernel == 'linear':
             self.params['c'] = params['c']
+        
+        else:
+            pass
 
         self.params['lambda'] = params['lambda']
 
@@ -86,8 +92,13 @@ class WKRR:
 
         if self.kernel == 'rbf':
             K_train = RBF_kernel(self.X, self.X, self.params['gamma'])
-        else:
+
+        elif self.kernel == 'linear':
             K_train = linear_kernel(self.X, self.X, self.params['c'])
+
+        else:
+            K_train = self.X
+
 
         self.alpha = self.opt_alpha(K_train, y, self.params['lambda'], P)
 
@@ -99,8 +110,12 @@ class WKRR:
 
         if self.kernel == 'rbf':
             K_test = RBF_kernel(X_test, self.X, self.params['gamma'])
-        else:
+
+        elif self.kernel == 'linear':
             K_test = linear_kernel(X_test, self.X, self.params['c'])
+
+        else:
+            K_test = X_test            
 
         return K_test @ self.alpha + self.intercept
 
@@ -133,8 +148,18 @@ class WKRR:
             return P @ np.linalg.solve(P @ K @ P + nlI, P @ y)
 
 class KRR(WKRR):
+    """
+    Kernel Ridge Regression
+
+    """
 
     def __init__(self, kernel='rbf', fit_intercept=True) -> None:
+
+        """
+        Initialize the Kernel Ridge Regression model
+        kernel: str, default='rbf'. The kernel to use. Options are 'rbf', 'linear', and 'precomputed'
+        fit_intercept: bool, default=True. Whether to fit an intercept term
+        """
         super().__init__(kernel, fit_intercept)
         self.intercept = 0
         self.alpha = np.array([])
@@ -146,9 +171,13 @@ class KRR(WKRR):
 
         if self.kernel == 'rbf':
             K_train = RBF_kernel(self.X, self.X, self.params['gamma'])
-            
-        else:
+
+        elif self.kernel == 'linear':
             K_train = linear_kernel(self.X, self.X, self.params['c'])
+
+        else:
+            K_train = self.X            
+        
 
         self.alpha = self.opt_alpha(K_train, self.y, self.params['lambda'])
 
@@ -160,6 +189,7 @@ class KRR(WKRR):
         n, _ = self.X.shape
         I = np.eye(K.shape[0])
         nlI = n * reg_lam * I
+        # print(K.shape, nlI.shape, y.shape)
 
         return np.linalg.solve(K + nlI, y)
         
