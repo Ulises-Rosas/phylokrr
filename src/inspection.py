@@ -3,6 +3,19 @@ import numpy as np
 from phylokrr.utils import split_data
 
 def permutation_importance(X, y, model, num_test = 100, seed = 12038, iterations = 1000):
+    """
+    Permutation importance
+
+    X: data
+    y: target
+    model: model
+    num_test: number of test samples
+    seed: random seed
+    iterations: number of iterations
+
+    returns: Feature importance for all features. 
+        Each column represents the change in error
+    """
 
     np.random.seed(seed)
 
