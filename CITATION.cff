@@ -3,7 +3,9 @@ message: "If you use this software, please cite it as below."
 authors:
 - family-names: "Rosas-Puchuri"
   given-names: "Ulises"
-orcid: https://orcid.org/0000-0003-0529-2623
-title: Ulises-Rosas/phylokrr: zenodo release
-version: v1.0.1
+  orcid: "https://orcid.org/0000-0003-0529-2623"
+title: "phyloKRR"
+version: 1.0.1
+doi: 10.5281/zenodo.12595028
 date-released: 2024-06-29
+url: "https://github.com/ulises-rosas/phylokrr"
