@@ -128,6 +128,6 @@ plt.legend()
 </p>
  -->
 
-<!--  # Reference
+# Reference
 
-Rosas-Puchuri, U., Santaquiteria, A., Khanmohammadi, S., Solis-Lemus, C., & Betancur-R, R. (2023). [Non-linear phylogenetic regression using regularized kernels](https://www.biorxiv.org/content/10.1101/2023.10.04.560983v1.abstract). bioRxiv, 2023-10. -->
+Rosas‐Puchuri, U., Santaquiteria, A., Khanmohammadi, S., Solís‐Lemus, C., & Betancur‐R, R. (2024). [Non‐linear phylogenetic regression using regularised kernels](https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.14385). Methods in Ecology and Evolution.
