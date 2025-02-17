@@ -82,8 +82,9 @@ pkrr_model = KRR(kernel='rbf', fit_intercept= True)
 params = {'lambda': 1, 'gamma': 1}
 # set hyperparamters
 pkrr_model.set_params(**params)
-# fit model with phylogenetic covariance matrix
+# fit model
 pkrr_model.fit(X_train, y_train,)
+# make predictions
 y_pred_kernel = pkrr_model.predict(X_test)
 ```
 
