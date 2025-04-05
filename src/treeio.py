@@ -7,7 +7,7 @@ class myNode:
                  ancestor = None,
                  index = None, 
                  node_label = None,
-                 branch_length = 0):
+                 branch_length = 0.):
         self.name = name
         self.left = left
         self.right = right
@@ -50,9 +50,10 @@ def fas_to_dic(file):
 
 def writeT(p):
 
-    # p = n3
-    # bl = '' if not p.branch_length else f":{p.branch_length}"
-    bl =  f":{p.branch_length}"
+    if not p:
+        return
+
+    bl = f":{p.branch_length}"
 
     if p.left is None and p.right is None:
         return f"{p.name}{bl}"
@@ -61,23 +62,24 @@ def writeT(p):
         ln = writeT(p.left)
         rn = writeT(p.right)
         nlabel = '' if not p.label else p.label
-
-        return f"({ln},{rn}){nlabel}{bl}"
+        node = f"{ln},{rn}" if rn else ln
+            
+        return f"({node}){nlabel}{bl}"
 
 def parseTree(all_nodes, root = -1):
 
     w = all_nodes[root]
 
     if isinstance(w.right, list):
-        n1 = w.right[0]
-        n2 = w.right[1]
-        n3 = w.left
-
+        n1 = w.left
+        n2 = w.right[0]
+        n3 = w.right[1]
+        
         return f"({writeT(n1)},{writeT(n2)},{writeT(n3)});"
     
     else:
-        n1 = w.right
-        n2 = w.left
+        n1 = w.left
+        n2 = w.right
 
         return f"({writeT(n1)},{writeT(n2)});"
 
@@ -185,13 +187,19 @@ def has_children(p):
     else:
         return True
 
+def has_child(p):
+    if p.left or p.right:
+        return True
+    else:
+        return False    
+
 def solve_polytomy(p, n, nodes):
     """
     solve polytomy by adding a new node y on the
     edge (p, gp) where gp is the grandparent of p.
     Draw:
           gp
-          |
+          | (edge can be left or (any) right)
           y
          / \
         p   n3
@@ -230,21 +238,31 @@ def solve_polytomy(p, n, nodes):
     # make a new node y
     # make p and n children of y
     if p_left:
+        # y -> gp
         y = myNode(left=p, right=n, ancestor=gp, 
                    branch_length=p.branch_length)
-        
-        nodes += [y]
+        # y <- gp, replace p with y
         gp.left = y
     else:
+        # y -> gp
         y = myNode(left=n, right=p, ancestor=gp, 
                    branch_length=p.branch_length)
-        
-        nodes += [y]
-        gp.right = y
-        
+        # y <- gp, replace p with y
+        # root case special case
+        if isinstance(gp.right, list):
+            if gp.right[0] == p:
+                gp.right[0] = y
+            else:
+                gp.right[1] = y
+        else:
+            gp.right = y
+
+    # add y to the list of nodes
+    nodes += [y]
+
     # if it is polytomy, then most likely this is already 
     # 0, but we set it to 0 anyway
-    p.branch_length = 0
+    p.branch_length = 0.
     p.ancestor = y
     n.ancestor = y
 
@@ -284,16 +302,18 @@ def set_left_or_right(p, n, root, nodes):
         return
     
     # set right child if it is None
+    # as second option
     if p.right is None:
         p.right = n
         return
     
     # if left and right children are not None
     # then the right child is a list of the current
-    # right child and the new node n
+    # right child and the new node n if p is the root
     if p == root:
         p.right = [p.right, n]
     else:
+        # otherwise, we have a polytomy.
         # if p is not the root, then it has an ancestor
         # and it is a polytomy. We solve the polytomy
         solve_polytomy(p, n, nodes)
@@ -328,8 +348,8 @@ def build_up_nodes(tokens):
             # move down a node
             p = p.ancestor
 
-            if tk == ")" and not has_children(p):
-                raise ValueError(f"Error: We expect two children per node. Check character {k}")
+            if tk == ")" and not has_child(p):
+                raise ValueError(f"Error: We expect at least a child per node. Check character {k}")
             
             # check if the next token is a number
             next_number = check_if_number(tokens[i+1])
@@ -516,8 +536,9 @@ def get_vcv(mytree):
 #     tmp_nodes, tmp_root = parseNewickTree(i)
 #     print(parseTree(tmp_nodes, root = tmp_root.index))
 
-# mytree = "(t1:4,(t2:3,t3:2):1);"
+# mytree = "(t4,t1:4,(t2:3):1);"
 # nodes, root = parseNewickTree(mytree)
+# print(root.right)
 # print(parseTree(nodes, root = root.index))
 
 # vcv, names = get_vcv(mytree)
