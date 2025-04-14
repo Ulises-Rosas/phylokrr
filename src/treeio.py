@@ -1,21 +1,4 @@
-
-class myNode:
-
-    def __init__(self, name = None, 
-                 left = None, 
-                 right = None, 
-                 ancestor = None,
-                 index = None, 
-                 node_label = None,
-                 branch_length = 0.):
-        self.name = name
-        self.left = left
-        self.right = right
-        self.ancestor = ancestor
-        self.index = index
-        self.branch_length = branch_length
-        self.label = node_label
-
+from collections import deque
 
 def fas_to_dic(file):
     
@@ -47,24 +30,149 @@ def fas_to_dic(file):
         
     return dict(zip(keys, values))
 
+# region: extended newick parser
+class myNode:
+
+    def __init__(self, name = None, 
+                 left = None, 
+                 right = None, 
+                 ancestor = None,
+                 index = None, 
+                 hybrid = False,
+                 node_label = '',
+                 branch_length = 0.0,
+                 support = 0.0,
+                 gamma = 1.0, # probability
+                 ):
+        
+        self.name = name
+        self.left = left
+        self.right = right
+        self.ancestor = ancestor
+        self.index = index
+        self.branch_length = branch_length
+        self.label = node_label
+        self.hybrid = hybrid
+        self.gamma = gamma
+        self.support = support
+
+
+        # it is true when node is hybrid and 
+        # incoming hybrid nodes  are connected 
+        # from their left to this node.
+        # From this node sucessors are present.
+        self.isChild = False # child from hybrid nodes
+
+    def __repr__(self):
+        base_str = f"Node(i = {self.index}"
+
+        if self.name:
+            base_str += f", n = {self.name}"
+
+        if self.left:
+            base_str += f", l = {self.left.index}"
+
+        if  self.right and not isinstance( self.right, list):
+                base_str += f", r = {self.right.index}"
+
+        return base_str + ")"
+
+def is_leaf(p):
+    """
+    Check if the node is a tree leaf node
+    """
+    if p.left is None and p.right is None:
+        return True
+    else:
+        return False
+
+def is_HybLeaf(p):
+    """
+    Check if the node is a hybrid leaf node
+    """
+    if p.hybrid and not p.isChild:
+        return True
+    else:
+        return False
+
+
+def make_node_info(p):
+    """
+    make node info.
+
+    Ref: RichNewick.pdf (pp. 9-10)
+
+    parameters:
+    ----------
+    p : myNode
+        node to set info
+
+    returns:
+    -------
+    ni : str
+        node info string
+    """
+    la = f"{p.label}" if p.label else ''
+    le = f"{p.branch_length}" if p.branch_length else ''
+    su = f"{p.support}" if p.support else ''
+    # no new info if 1.0
+    pr = f"{p.gamma}" if p.gamma != 1.0 else ''
+
+    ni = ''
+    # combinations of 3
+    if le and su and pr:
+        ni += f":{le}:{su}:{pr}"
+
+    # combinations of 2
+    elif (not le) and su and pr:
+        ni += f"::{su}:{pr}"
+
+    elif le and (not su) and pr:
+        ni += f":{le}::{pr}"
+
+    elif le and su and (not pr):
+        ni += f":{le}:{su}"
+    
+    # combinations of 1
+    elif le and (not su) and (not pr):
+        ni += f":{le}"
+
+    elif (not le) and su and (not pr):
+        ni += f"::{su}"
+
+    elif (not le) and (not su) and pr:
+        ni += f":::{pr}"
+
+    else: # combination of 0
+        pass
+
+    if not is_leaf(p):
+        ni = la + ni
+
+    return ni
+
 
 def writeT(p):
 
     if not p:
         return
-
-    bl = f":{p.branch_length}"
-
-    if p.left is None and p.right is None:
-        return f"{p.name}{bl}"
+    
+    if is_leaf(p) or is_HybLeaf(p):
+        # extract leaf node info
+        node_info = make_node_info(p)
+        return f"{p.name}{node_info}"
     
     else:
         ln = writeT(p.left)
         rn = writeT(p.right)
-        nlabel = '' if not p.label else p.label
+   
         node = f"{ln},{rn}" if rn else ln
+        # extract node info only
+        # when we reach the end 
+        # of the stack
+        node_info = make_node_info(p)
             
-        return f"({node}){nlabel}{bl}"
+        return f"({node}){node_info}"
 
 def parseTree(all_nodes, root = -1):
 
@@ -172,14 +280,78 @@ def tokenize(tree):
             tokens.append(tempStr)
 
     return tokens
-
-def check_if_number(s):
-    try:
-        float(s)
-        return True
-    except ValueError:
-        return False
     
+def set_float(s, k):
+    try:
+        return float(s)
+    
+    except ValueError:
+        raise ValueError(f"Error: We expect a number at non-label node info. Check {s} at character {k}")
+        
+def next_nodeInfo(s):
+    """
+    This essentially checks if the next token
+    is not a comma or a semicolon. If it neither
+    of these, then it is a node info.
+    """
+    return True if (s != ',') or (s != ';') else False
+
+def is_hybrid(s):
+    """
+    check if the string is a hybrid
+    """
+    if s.startswith('#'):
+        return True
+    else:
+        return False
+
+def set_nodeInfo(p, infoType, tk, k, hyb_nodes):
+    """
+    set node info based on the type of info
+    
+    0 : label
+    1 : branch length
+    2 : support
+    3 : probability
+    
+    ref: RichNewick.pdf
+
+    parameters:
+    -----------
+    p : myNode
+        node to set
+    infoType : int
+        type of info to set
+    tk : str
+        token to set
+    k : int
+        character position in the string
+    hyb_nodes : dict
+        dictionary of hybrid nodes
+        where the key is the id and the value
+        is a list of nodes
+    """
+
+    if infoType == 0: # label
+        # impossible to happen, but just in case
+        assert not is_leaf(p), f"Error: We expect a label for a non-leaf node. Check {tk} at character {k}"
+    
+        p.label = tk
+        p.hybrid = is_hybrid(tk)
+
+        if p.hybrid:
+            # update the hybrid nodes
+            update_hyb_nodes(p, hyb_nodes, tk)
+
+    elif infoType == 1:
+        p.branch_length = set_float(tk, k)
+
+    elif infoType == 2:
+        p.support = set_float(tk, k)
+
+    else:
+        p.gamma = set_float(tk, k)
+
 
 def has_children(p):
     if p.left is None or p.right is None:
@@ -321,11 +493,19 @@ def set_left_or_right(p, n, root, nodes):
 
 def build_up_nodes(tokens):
 
-    nodes = []
+    hyb_nodes = {}
+    # ensures O(1) appending 
+    nodes = deque()
     root = None
     p = None
-    readingBranchLength = False
-    readingLabel = False
+
+    readingNodeInfo = False
+    # Info Type: 0 for label, 
+    # 1 for edge, 2 for support, 
+    # 3 for probability
+    infoType = 0 
+
+    # k tracks the position in the string
     k = 0
     for i, tk in enumerate(tokens):
 
@@ -339,26 +519,40 @@ def build_up_nodes(tokens):
                 root = n
             
             else:
+                # connect the node to the parent
                 n.ancestor = p
+                # set new node the left or right child
                 set_left_or_right(p, n, root, nodes)
-
+            
+            # let the current node 
+            # be the parent
             p = n
 
         elif tk == "," or tk == ")":
             # move down a node
             p = p.ancestor
 
-            if tk == ")" and not has_child(p):
-                raise ValueError(f"Error: We expect at least a child per node. Check character {k}")
+            if tk == ")":
+                # check if the node 
+                # is not empty
+                if not has_child(p):
+                    raise ValueError(f"Error: We expect at least a child per node. Check character {k}")
+                
+                # check if there info for the 
+                # internal node coming
+                if next_nodeInfo(tokens[i+1]):
+                    # start reading internal node info.
+                    readingNodeInfo = True
+                    # we iterate all ':' tokens
+                    # to find the type of info
+                    # we start from 0
+                    infoType = 0 
             
-            # check if the next token is a number
-            next_number = check_if_number(tokens[i+1])
-            
-            if tk == ")" and next_number:
-                readingLabel = True
-            
-        elif tk == ":":
-            readingBranchLength = True
+            # it means we reached ',' and we stop
+            # reading node info
+            else:
+                readingNodeInfo = False
+                infoType = 0
 
         elif tk == ";":
             # end of tree
@@ -366,31 +560,145 @@ def build_up_nodes(tokens):
                 raise ValueError("Error: We expect to finish at the root node")
 
         else:
-            if readingBranchLength:
-                p.branch_length = float(tk)
-                readingBranchLength = False
+            if readingNodeInfo:
+                if tk == ":":
+                    # this indicates that there 
+                    # is info on the next token.
 
-            elif readingLabel:
-                p.label = float(tk)
-                readingLabel = False
-                
+                    # Notice that if p is leaf node, 
+                    # the next token is ":" and then
+                    # it will start reading from length
+                    # as infoType will be 1:
+                    infoType += 1
+                    # then we go to the next token
+                    continue
+
+                # reading node info
+                if 0 <= infoType <= 3:
+                    set_nodeInfo(p, infoType, tk, k, hyb_nodes)
+
             else:
                 # leaf node
-                n = myNode(name = tk.strip("''"))
+                leaf_name = tk.strip("''")
+                n = myNode(name=leaf_name, hybrid=is_hybrid(leaf_name))
+                
+                # update set of nodes
                 nodes.append(n)
+                # update set of hybrid nodes
+                if n.hybrid:
+                    update_hyb_nodes(n, hyb_nodes, leaf_name)
+
+                # connect the leaf node to the parent
                 n.ancestor = p
+                # set new node to left or right
                 set_left_or_right(p, n, root, nodes)
 
+                # let the current node 
+                # be the parent
                 p = n
 
-    return nodes, root
+                # check if there is leaf node info coming
+                if next_nodeInfo(tokens[i+1]):
+                    readingNodeInfo = True
+                    # Iterations will decide 
+                    # the type of info
+                    infoType = 0
+
+    if hyb_nodes:
+        # process the hybrid nodes
+        connect_hyb_nodes(hyb_nodes)
+
+    return list(nodes), hyb_nodes, root
+
+def connect_hyb_nodes(hyb_nodes):
+    """
+    connect the hybrid nodes to one child,
+    the one that is not a leaf node (i.e., it
+    has no successors). Child node will have
+    multiple ancestors. The first ancestor will be
+    tree base node. The rest of the ancestors
+    and the rest of ancestors will be hybrid leaf nodes.
+
+    The left of hybrid leaf nodes will
+    be connected to the child node.
+
+    parameters:
+    -----------
+    hyb_nodes : dict
+        dictionary of hybrid nodes
+        where the key is the id and the value
+        is a list of nodes
+        e.g. {#H1: [n1, n2, n3]}
+        where n1, n2, n3 are hybrid nodes,
+        with one of them being a child node
+        and the rest are leaf nodes.
+
+    returns:
+    -------
+        None
+    """
+    for k, nodes in hyb_nodes.items():    
+        # recieving all the leaf nodes
+        # this node has successors
+        out_node = None # child node
+        # injecting the leaf nodes
+        in_nodes = deque()
+        
+        for n in nodes:
+            if is_leaf(n):
+                in_nodes.append(n)
+            else:
+                out_node = n
+
+        assert len(in_nodes) == len(nodes) - 1, f"Error: We found {len(in_nodes)} leaf nodes representing {k} when it should be {len(nodes) - 1} (i.e. number of {k} nodes - 1)"
+        assert out_node, f"Error: We found no {k} nodes with successors"
+
+        out_node.ancestor = [out_node.ancestor] + list(in_nodes)
+        out_node.isChild = True
+        
+        # leaf nodes are empty
+        # and they have no successors
+        for n in in_nodes:
+            n.left = out_node
+
+
+def update_hyb_nodes(p, hyb_nodes, id):
+    """
+    update the hybrid nodes
+
+    parameters:
+    -----------
+    p : myNode
+        node to set
+
+    hyb_nodes : dict
+        dictionary of hybrid nodes
+        where the key is the id and the value
+        is a list of nodes
+
+    id : str
+        id of the hybrid node e.g. #H1, #H2, etc. 
+        if p is a internal node then
+        the id is the label of the node
+        if p is a leaf node then 
+        the id is the name of the node
+
+    returns:
+    -------
+        None
+    """
+    if id not in hyb_nodes:
+        hyb_nodes[id] = deque([p])
+
+    else:
+        hyb_nodes[id].append(p) # O(1)
 
 def parseNewickTree(mstr):
     # mstr = mytree
     tokens = tokenize(mstr)
     # print(tokens)
 
-    nodes, root = build_up_nodes(tokens)
+    nodes, _, root = build_up_nodes(tokens)
     # print(nodes[0].right)
     for i, n in enumerate(nodes):
         n.index = i
@@ -399,6 +707,23 @@ def parseNewickTree(mstr):
             root = n
 
     return nodes, root
+
+def parseNewickNet(mstr):
+    # mstr = mytree
+    tokens = tokenize(mstr)
+    # print(tokens)
+
+    nodes, hyb_nodes, root = build_up_nodes(tokens)
+    # print(nodes[0].right)
+    for i, n in enumerate(nodes):
+        n.index = i
+
+        if n.ancestor is None:
+            root = n
+
+    return nodes, hyb_nodes, root
+# endregion: extended newick parser
+
 
 def dfs_ur(n, path, paths):
     """
