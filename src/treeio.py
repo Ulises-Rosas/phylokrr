@@ -1,3 +1,4 @@
+import numpy as np
 from collections import deque
 
 def fas_to_dic(file):
@@ -724,116 +725,148 @@ def parseNewickNet(mstr):
     return nodes, hyb_nodes, root
 # endregion: extended newick parser
 
+# region: vcv matrix
+def get_nodes(n):
+    # 3*(2n-2) = O(n)
+    out = []
+    if isinstance(n, list):
+        for ni in n:
+            out.append(ni)
+    else:
+        if n is not None:
+            out.append(n)
 
-def dfs_ur(n, path, paths):
+    return out
+
+def get_adj(nodes):
+    adj = {}
+    for n in nodes:
+        adj[n] = []
+        adj[n] += get_nodes(n.left)
+        adj[n] += get_nodes(n.right)
+        adj[n] += get_nodes(n.ancestor)
+
+    return adj
+
+def dfs_distances(adj, start, C):
+    # O(n) since it's a tree
+    S = [(start, -1, 0)]   # (node, parent, distance)
+    dist = {}
+
+    while S:
+        node, parent, d = S.pop()
+        dist[node] = d
+
+        for u in adj[node]:
+            if u != parent:
+                S.append((u, node, d + C[(node, u)]))
+
+    return dist
+
+def get_weight(v, u):
+    # if isinstance(v.ancestor, list):
+    if u.left == v or u.right == v:
+        return v.branch_length
+    else:        
+        return u.branch_length
+
+def get_C(nodes, adj):
     """
-    DFS for unrooted trees
+    get edge weights
+    O(n) since it's a tree
     """
-    if n:
-        path += [n.index]
+    C = {} # O(n)
+    for v in nodes:
+        for u in adj[v]:
+            w = get_weight(v, u)
+            C[(v, u)] = w
+            C[(u, v)] = w
 
-        if n.name:
-            paths.append(list(path)) 
+    return C
 
-        
-        dfs_ur(n.left, path, paths)
+def get_APSP(leaves, adj, C):
+    n = len(leaves)
+    D = np.zeros((n, n))
 
-        if n.ancestor:
-            dfs_ur(n.right, path, paths)
-        else:
-            dfs_ur(n.right[0], path, paths)
-            dfs_ur(n.right[1], path, paths)
-
-        path.pop()
-
-def dfs_r(n, path, paths):
-    """
-    DFS for rooted trees
-    """
-    if n:
-        path += [n.index]
-
-        if n.name:
-            paths.append(list(path)) 
-
-        dfs_r(n.left, path, paths)
-        dfs_r(n.right, path, paths)
-
-        path.pop()
-
-def get_vcv_paths(paths, nodes):
-    """
-    get the variance-covariance matrix from
-    a set of paths from the root to the tips
-
-    parameters:
-    -----------
-    paths : list
-        list of paths from the root to the tips
-
-    nodes : list
-        list of nodes in the tree
-
-    returns:
-    --------
-
-    vcv : list
-        variance-covariance matrix
-
-    name_list : list
-        ordered list of tip names
-        used to build the vcv matrix
-    """
-
-    n = len(paths)
-    vcv = [[0.]*n for i in range(n)]
-    # O(n^3)
-    for i in range(n):
-        for j in range(i+1, n):
-
-            path_i = paths[i]
-            path_j = paths[j]
-            min_len = min(len(path_i), len(path_j))
-            tmp_corr = 0.
-
-            for k in range(1, min_len):            
-                if path_i[k] == path_j[k]:
-                    # print(i,j,k)
-                    tmp_corr += nodes[path_i[k]].branch_length
-
-                else:
-                    break
-
-            vcv[i][j] = tmp_corr
-            vcv[j][i] = tmp_corr
-
-    name_list = ['']*n
     # O(n^2)
+    for i in range(n - 1): # O(n)
+        u = leaves[i]
+        tmp_dist = dfs_distances(adj, u, C) # O(n)
+        for j in range(i + 1, n):
+            v = leaves[j]
+            D[i, j] = tmp_dist[v]
+            D[j, i] = tmp_dist[v]
+
+    return D
+
+def get_BM(D, root, leaves, adj, C):
+    n = len(leaves)
+    dist_root = dfs_distances(adj, root, C)
+    D_r = np.zeros(n)
+    # O(n)
     for i in range(n):
-        path_i = paths[i]
-        corr = 0.
-        for k in range(1, len(path_i)):
-            corr += nodes[path_i[k]].branch_length
+        D_r[i] = dist_root[leaves[i]]
 
-        vcv[i][i] = corr
-        name_list[i] = nodes[path_i[-1]].name
+    # O(n^2)
+    BM_VCV = np.zeros((n, n))
+    for i in range(n):
+        BM_VCV[i, :] = (D_r[i] + D_r - D[i, :])/2
 
-    return vcv, name_list
+    return BM_VCV
 
-def get_vcv(mytree):
+def get_cov_mat(nodes, root, process = "BM",
+                 sigma2 = 1, alpha = 1):
+    # target nodes: leaves 
+    leaves = [n for n in nodes if is_leaf(n)]
+    names = [n.name for n in leaves]
+
+    adj = get_adj(nodes) # O(n)
+    C = get_C(nodes, adj) # O(n)
+
+    # O(n^2), it transverses the tree n times, and
+    # each traversal is O(n)
+    D = get_APSP(leaves, adj, C)
+    # print(D)
+    if process == "BM":
+        # makes for each row i it makes n calculations from D.
+        # since there n rows, the time complexity is O(n^2)
+        BM_D = get_BM(D, root, leaves, adj, C) # O(n^2)
+        return sigma2*BM_D, names
+    
+    elif process == "OU":
+        c1 = 2*alpha
+        return (sigma2/c1)*np.exp(-c1*D), names
+    
+    else:
+        raise ValueError("process must be either 'BM' or 'OU'")
+
+def get_vcv(mytree, process = "BM", sigma2 = 1, alpha = 0.5):
     """
     get the variance-covariance matrix from
-    a newick tree string
+    a newick tree string.
+
+    O(n^2) time complexity, where n is the number of tips in the tree.
 
     parameters:
     -----------
     mytree : str
         newick tree string
 
+    process : str
+        "BM" for Brownian motion
+        "OU" for Ornstein-Uhlenbeck
+
+    sigma2 : float
+        evolutionary rate
+
+    alpha : float
+        selection parameter, only used for OU process
+
     returns:
     --------
     vcv : list
-        variance-covariance matrix
+        variance-covariance matrix without
+        being multiplied by the evolutionary rate
 
     name_list : list
         ordered list of tip names
@@ -842,17 +875,14 @@ def get_vcv(mytree):
 
     nodes, root = parseNewickTree(mytree)
     assert not isinstance(root.right, list), "Unrooted tree not supported"
-    # paths from root to tips
-    path = []
-    paths = []
-    dfs_r(root, path, paths)
-    # pairwise comparisons of paths to
-    # get the variance-covariance matrix
-    vcv, names = get_vcv_paths(paths, nodes)
+
+    vcv, names = get_cov_mat(nodes, root, process = process, sigma2 = sigma2, alpha = alpha)
     # return the variance-covariance matrix
     return vcv, names
 
-# testings of code
+# endregion: vcv matrix
+
+# # testings of code
 # mytree1 = "((t2:3,t3:2):1,t4,t1:4);"
 # mytree2 = "(t4,(t2:3,t3:2):1,t1:4);"
 # mytree3 = "(t4,t1:4,(t2:3,t3:2):1);"
@@ -866,6 +896,7 @@ def get_vcv(mytree):
 # print(root.right)
 # print(parseTree(nodes, root = root.index))
 
+# mytree = "((t4,t1:4),(t2:3):1);"
 # vcv, names = get_vcv(mytree)
 
 # import numpy as np
