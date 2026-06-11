@@ -835,7 +835,7 @@ def get_cov_mat(nodes, root, process = "BM",
     
     elif process == "OU":
         c1 = 2*alpha
-        return (sigma2/c1)*np.exp(-c1*D), names
+        return (sigma2/c1)*np.exp(-alpha*D), names
     
     else:
         raise ValueError("process must be either 'BM' or 'OU'")
