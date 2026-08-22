@@ -725,6 +725,109 @@ def parseNewickNet(mstr):
     return nodes, hyb_nodes, root
 # endregion: extended newick parser
 
+# region: tree manipulation
+def flip_nodes(P, u_idx = 1, v_idx = 1):
+    """
+    P is the path to root.
+
+    Flip nodes such that:
+              n_anc
+                | anc
+                n
+   left/right /  \  left/right
+                 n_child
+    
+    Turns into:
+              n_anc
+                | left/right
+                n
+   left/right /  \  anc
+                 n_child
+
+    Since P is a path to root, all n_anc belong to P
+    n_child are picked from P
+    """
+    assert u_idx > 0, "flips needs previous node"
+    for i in range(u_idx, v_idx):
+        n = P[i]
+
+        n_anc  = n.ancestor
+        n_child = P[i-1]
+
+        n.ancestor = n_child
+
+        if n.left == n_child:
+            n.left = n_anc
+        else:
+            n.right = n_anc
+
+def get_RootPath(P, tmp_n, root):
+    """
+    nodes from tmp_n ancestor to root.
+    """
+    while tmp_n != root:
+        P.append(tmp_n.ancestor)
+        tmp_n = tmp_n.ancestor
+
+def reroot(n_t: myNode, root: myNode, all_nodes: list[myNode]):
+    """
+    Re-root above n_t.
+    root is the current root.
+
+    It returns a new root.
+    """
+
+    r_new = myNode(index=root.index)
+    P = [r_new]
+    get_RootPath(P, n_t, root)
+
+    n_t_anc = P[1]
+    if n_t_anc == root:
+        # print('Trivial re-rooting')
+        return 
+    
+    # add to the new root
+    # left and right defined 
+    # on the target node and its
+    # adjacent node
+    r_new.right = n_t_anc
+    r_new.left  = n_t
+
+    # let target node new ancestor
+    # be the r_new
+    n_t.ancestor = r_new
+
+    # let adjacent node point to the 
+    # r_new
+    if n_t_anc.left == n_t:
+        n_t_anc.left = r_new
+    else:
+        n_t_anc.right = r_new
+
+    # flip nodes from ancestor of n_t
+    # to right before the root
+    flip_nodes(P, 1, len(P) - 1)
+
+    # root child 1 on path
+    r_c1 = P[-2] 
+    # root child 2
+    r_c2 = root.left if root.left != r_c1 else root.right
+
+    # make r_c2 (=> its substree) ancestor be
+    # r_c1
+    r_c2.ancestor = r_c1
+
+    # r_c1 must point to the root
+    # after flipping
+    if r_c1.left == root:
+        r_c1.left = r_c2
+    else:
+        r_c1.right = r_c2
+
+    all_nodes[r_new.index] = r_new
+    return r_new
+# endregion: tree manipulation
+
 # region: vcv matrix
 def get_nodes(n):
     # 3*(2n-2) = O(n)
