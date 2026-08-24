@@ -769,7 +769,7 @@ def get_RootPath(P, tmp_n, root):
         P.append(tmp_n.ancestor)
         tmp_n = tmp_n.ancestor
 
-def reroot(n_t: myNode, root: myNode, all_nodes: list[myNode]):
+def reroot(n_t: myNode, root: myNode, all_nodes: list):
     """
     Re-root above n_t.
     root is the current root.
