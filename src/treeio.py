@@ -114,7 +114,7 @@ def make_node_info(p):
         node info string
     """
     la = f"{p.label}" if p.label else ''
-    le = f"{p.branch_length}" if p.branch_length else ''
+    le = f"{p.branch_length}"
     su = f"{p.support}" if p.support else ''
     # no new info if 1.0
     pr = f"{p.gamma}" if p.gamma != 1.0 else ''
@@ -152,6 +152,32 @@ def make_node_info(p):
 
     return ni
 
+def writeNewickTree(w):
+    """
+    Write a newick tree from a root node w.
+
+    Parameters
+    ----------
+    w : myNode
+        The root node of the tree.
+
+    Returns
+    -------
+    str
+        The newick string representation of the tree.
+    """
+    if isinstance(w.right, list):
+        n1 = w.left
+        n2 = w.right[0]
+        n3 = w.right[1]
+        
+        return f"({writeT(n1)},{writeT(n2)},{writeT(n3)});"
+    
+    else:
+        n1 = w.left
+        n2 = w.right
+
+        return f"({writeT(n1)},{writeT(n2)});"
 
 def writeT(p):
 
